@@ -1,4 +1,4 @@
-/* 
+/*
 
   Copyright(c) HiFiPhile. All rights reserved.
 
@@ -8,19 +8,19 @@
 
   Copyright(c) Pat Brouillette. All rights reserved.
 
-  This program is free software; you can redistribute it and/or modify 
+  This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
   published by the Free Software Foundation.
 
-  This program is distributed in the hope that it will be useful, but 
-  WITHOUT ANY WARRANTY; without even the implied warranty of 
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+  This program is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
   General Public License for more details.
 
-  You should have received a copy of the GNU General Public License 
-  along with this program; if not, write to the Free Software 
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-  The full GNU General Public License is included in this distribution 
+  The full GNU General Public License is included in this distribution
   in the file called LICENSE.GPL.
 
   Contact Information:
@@ -34,10 +34,10 @@
 #include <iostream>
 #include <fstream>
 
-spdifAnalyzerResults::spdifAnalyzerResults( spdifAnalyzer* analyzer, spdifAnalyzerSettings* settings )
-:	AnalyzerResults(),
-    mSettings( settings ),
-    mAnalyzer( analyzer )
+spdifAnalyzerResults::spdifAnalyzerResults(spdifAnalyzer* analyzer, spdifAnalyzerSettings* settings)
+    : AnalyzerResults(),
+    mSettings(settings),
+    mAnalyzer(analyzer)
 {
 }
 
@@ -45,7 +45,26 @@ spdifAnalyzerResults::~spdifAnalyzerResults()
 {
 }
 
-void spdifAnalyzerResults::GenerateBubbleText( U64 frame_index, Channel& channel, DisplayBase display_base )
+int32_t spdifAnalyzerResults::sext_16b(int32_t instr) {
+    int32_t value = (0x0000FFFF & instr);
+    int32_t mask = 0x00008000;
+    if (mask & instr) {
+        value += 0xFFFF0000;
+    }
+    return value;
+}
+
+int32_t spdifAnalyzerResults::sext_24b(int32_t instr) {
+    int32_t value = (0x00FFFFFF & instr);
+    int32_t mask = 0x00800000;
+    if (mask & instr) {
+        value += 0xFF000000;
+    }
+    return value;
+}
+
+
+void spdifAnalyzerResults::GenerateBubbleText(U64 frame_index, Channel& channel, DisplayBase display_base)
 {
     Frame frame = GetFrame(frame_index);
     const char* frtype;
@@ -77,7 +96,7 @@ void spdifAnalyzerResults::GenerateBubbleText( U64 frame_index, Channel& channel
         break;
     }
 
-    const char *v, *u, *c;
+    const char* v, * u, * c;
     if (!(frame.mData2 & 1 << 28))
     {
         v = " + V";
@@ -103,24 +122,47 @@ void spdifAnalyzerResults::GenerateBubbleText( U64 frame_index, Channel& channel
         c = " + 0";
     }
 
-    if (mSettings->mRes == spdifRes_16b)
-        AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
-    else
-        AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
-
     char result_str[128];
 
-    snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+    if (display_base == Decimal)
+    {
+        int32_t data;
+        if (mSettings->mRes == spdifRes_16b)
+        {
+            data = sext_16b(frame.mData1);
+            AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 16, number_str, 128);
+        }
+
+        else
+        {
+            data = sext_24b(frame.mData1);
+            AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 24, number_str, 128);
+        }
+
+        if(data >= 0)
+            snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+        else
+            snprintf(result_str, sizeof(result_str), "%s + -%s%s%s", frtype, number_str, v, c);
+    }
+    else
+    {
+        if (mSettings->mRes == spdifRes_16b)
+            AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
+        else
+            AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
+
+        snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+    }
 
     AddResultString(number_str);
     AddResultString(result_str);
 }
 
-void spdifAnalyzerResults::GenerateExportFile( const char* file, DisplayBase display_base, U32 export_type_user_id )
+void spdifAnalyzerResults::GenerateExportFile(const char* file, DisplayBase display_base, U32 export_type_user_id)
 {
-    if ( 0 == export_type_user_id ) /* text/csv */
+    if (0 == export_type_user_id) /* text/csv */
     {
-        std::ofstream file_stream( file, std::ios::out );
+        std::ofstream file_stream(file, std::ios::out);
 
         U64 trigger_sample = mAnalyzer->GetTriggerSample();
         U32 sample_rate = mAnalyzer->GetSampleRate();
@@ -128,12 +170,12 @@ void spdifAnalyzerResults::GenerateExportFile( const char* file, DisplayBase dis
         file_stream << "Time [s],Value" << std::endl;
 
         U64 num_frames = GetNumFrames();
-        for( U32 i=0; i < num_frames; i++ )
+        for (U32 i = 0; i < num_frames; i++)
         {
-            Frame frame = GetFrame( i );
-            
+            Frame frame = GetFrame(i);
+
             char time_str[128];
-            AnalyzerHelpers::GetTimeString( frame.mStartingSampleInclusive, trigger_sample, sample_rate, time_str, 128 );
+            AnalyzerHelpers::GetTimeString(frame.mStartingSampleInclusive, trigger_sample, sample_rate, time_str, 128);
 
             char number_str[128];
             if (mSettings->mRes == spdifRes_16b)
@@ -143,65 +185,65 @@ void spdifAnalyzerResults::GenerateExportFile( const char* file, DisplayBase dis
 
             file_stream << time_str << "," << number_str << std::endl;
 
-            if( UpdateExportProgressAndCheckForCancel( i, num_frames ) == true )
+            if (UpdateExportProgressAndCheckForCancel(i, num_frames) == true)
             {
                 break;
             }
         }
         file_stream.close();
     }
-    else if ( 1 == export_type_user_id ) /* wav */
+    else if (1 == export_type_user_id) /* wav */
     {
-        std::ofstream file_stream( file, std::ios::binary );
+        std::ofstream file_stream(file, std::ios::binary);
 
         struct WAVHeader     wh;
         U64                  num_frames = GetNumFrames();
         U64                  num_samples = 0;
 
-        wh_Init( &wh, (uint32_t) num_frames>>1 );
+        wh_Init(&wh, (uint32_t)num_frames >> 1);
 
-        file_stream.write((const char *)&wh,sizeof(wh));
+        file_stream.write((const char*)&wh, sizeof(wh));
 
-        for( U32 i=0; i < num_frames; i++ )
+        for (U32 i = 0; i < num_frames; i++)
         {
-            Frame frame = GetFrame( i );
-            
-            if ( ! (0x80 & frame.mType) ) /* general errors are not PCM */
+            Frame frame = GetFrame(i);
+
+            if (!(0x80 & frame.mType)) /* general errors are not PCM */
             {
-                uint16_t pcm = (uint16_t) frame.mData1;
-                file_stream.write((const char *)&pcm,sizeof(pcm));
+                uint16_t pcm = (uint16_t)frame.mData1;
+                file_stream.write((const char*)&pcm, sizeof(pcm));
                 num_samples++;
             }
 
-            if( UpdateExportProgressAndCheckForCancel( i, num_frames ) == true )
+            if (UpdateExportProgressAndCheckForCancel(i, num_frames) == true)
             {
                 break;
             }
         }
 
-        wh_Init( &wh, (uint32_t) num_samples>>1 );
+        wh_Init(&wh, (uint32_t)num_samples >> 1);
         file_stream.seekp(0);
-        file_stream.write((const char *)&wh,sizeof(wh));
+        file_stream.write((const char*)&wh, sizeof(wh));
         file_stream.close();
     }
-    else if ( 2 == export_type_user_id ) /* raw/bin */
+    else if (2 == export_type_user_id) /* raw/bin */
     {
-        std::ofstream file_stream( file, std::ios::binary );
+        std::ofstream file_stream(file, std::ios::binary);
 
         U64                  num_frames = GetNumFrames();
 
-        for( U32 i=0; i < num_frames; i++ )
+        for (U32 i = 0; i < num_frames; i++)
         {
-            Frame frame = GetFrame( i );
-            
-            if ( ! (0x80 & frame.mType) ) /* general errors are not data */
-            {
-                uint32_t raw = (uint32_t) frame.mData2;
+            Frame frame = GetFrame(i);
 
-                file_stream.write((const char *)&raw,sizeof(raw));
+            if (!(0x80 & frame.mType)) /* general errors are not data */
+            {
+                uint32_t raw = (uint32_t)frame.mData2;
+
+                file_stream.write((const char*)&raw, sizeof(raw));
             }
 
-            if( UpdateExportProgressAndCheckForCancel( i, num_frames ) == true )
+            if (UpdateExportProgressAndCheckForCancel(i, num_frames) == true)
             {
                 break;
             }
@@ -211,35 +253,35 @@ void spdifAnalyzerResults::GenerateExportFile( const char* file, DisplayBase dis
 
 }
 
-void spdifAnalyzerResults::GenerateFrameTabularText( U64 frame_index, DisplayBase display_base )
+void spdifAnalyzerResults::GenerateFrameTabularText(U64 frame_index, DisplayBase display_base)
 {
-    Frame frame = GetFrame( frame_index );
-    const char *frtype;
+    Frame frame = GetFrame(frame_index);
+    const char* frtype;
 
     ClearTabularText();
 
     char number_str[128];
 
-    switch(frame.mType)
+    switch (frame.mType)
     {
-        case sft_B:
-            frtype = "B";
+    case sft_B:
+        frtype = "B";
         break;
-        case (sft_B | 0x80):
-            frtype = "B";
-        break;
-
-        case sft_M:
-            frtype = "M";
+    case (sft_B | 0x80):
+        frtype = "B";
         break;
 
-        case sft_W:
-            frtype = "W";
+    case sft_M:
+        frtype = "M";
         break;
 
-        case sft_invalid:
-        default:
-            frtype = "Err";
+    case sft_W:
+        frtype = "W";
+        break;
+
+    case sft_invalid:
+    default:
+        frtype = "Err";
         break;
     }
 
@@ -269,26 +311,49 @@ void spdifAnalyzerResults::GenerateFrameTabularText( U64 frame_index, DisplayBas
         c = " + 0";
     }
 
-    if (mSettings->mRes == spdifRes_16b)
-        AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
-    else
-        AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
-
     char result_str[128];
 
-    snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+    if (display_base == Decimal)
+    {
+        int32_t data;
+        if (mSettings->mRes == spdifRes_16b)
+        {
+            data = sext_16b(frame.mData1);
+            AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 16, number_str, 128);
+        }
+
+        else
+        {
+            data = sext_24b(frame.mData1);
+            AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 24, number_str, 128);
+        }
+
+        if (data >= 0)
+            snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+        else
+            snprintf(result_str, sizeof(result_str), "%s + -%s%s%s", frtype, number_str, v, c);
+    }
+    else
+    {
+        if (mSettings->mRes == spdifRes_16b)
+            AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
+        else
+            AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
+
+        snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+    }
 
     AddTabularText(result_str);
 }
 
-void spdifAnalyzerResults::GeneratePacketTabularText( U64 packet_id, DisplayBase display_base )
+void spdifAnalyzerResults::GeneratePacketTabularText(U64 packet_id, DisplayBase display_base)
 {
     ClearResultStrings();
-    AddResultString( "not supported" );
+    AddResultString("not supported");
 }
 
-void spdifAnalyzerResults::GenerateTransactionTabularText( U64 transaction_id, DisplayBase display_base )
+void spdifAnalyzerResults::GenerateTransactionTabularText(U64 transaction_id, DisplayBase display_base)
 {
     ClearResultStrings();
-    AddResultString( "not supported" );
+    AddResultString("not supported");
 }

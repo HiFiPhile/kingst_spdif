@@ -41,6 +41,10 @@ public:
     spdifAnalyzerResults( spdifAnalyzer* analyzer, spdifAnalyzerSettings* settings );
     virtual ~spdifAnalyzerResults();
 
+    int32_t sext_16b(int32_t instr);
+
+    int32_t sext_24b(int32_t instr);
+
     virtual void GenerateBubbleText( U64 frame_index, Channel& channel, DisplayBase display_base );
     virtual void GenerateExportFile( const char* file, DisplayBase display_base, U32 export_type_user_id );
 
