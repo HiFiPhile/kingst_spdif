@@ -77,8 +77,8 @@ struct SpdifBitstreamAnalyzer
     uint64_t            last_b_sync;
     uint64_t            last_b_time;
 
-    uint64_t            last_threshold_12;
-    uint64_t            last_threshold_23;
+    float            last_threshold_12;
+    float            last_threshold_23;
 
     /* sample for current word */
     unsigned char       sample[4];
@@ -137,8 +137,8 @@ void wh_Init(
 
 static enum SpdifFrameType sba_FindSync(
     struct SpdifBitstreamAnalyzer   *sba,
-    uint64_t                         threshold_12,
-    uint64_t                         threshold_23 )
+    float                         threshold_12,
+    float                         threshold_23 )
 {
     enum SpdifFrameType found_sync = sft_invalid;
     uint64_t    i,nbits;
@@ -252,7 +252,7 @@ static enum SpdifFrameType sba_FindSync(
 static void sba_ReadSample(
     struct SpdifBitstreamAnalyzer   *sba,
     enum SpdifFrameType              sample_type,
-    uint64_t                         threshold_12 )
+    float                            threshold_12 )
 {
     uint64_t    bitpos;
     unsigned char   bitmask,submask,valmask;
@@ -375,13 +375,13 @@ static void sba_ReadSample(
 
 static uint64_t sba_AnalyzeRecentEdges(
     struct SpdifBitstreamAnalyzer   *sba,
-    uint64_t                        *pthreshold_12,
-    uint64_t                        *pthreshold_23 )
+    float                           *pthreshold_12,
+    float                           *pthreshold_23 )
 {
-    uint64_t        w,r;
-    uint64_t        min_dt = 0;
-    uint64_t        max_dt = 0;
-    uint64_t        mid_dt = 0;
+    uint64_t     w,r;
+    float        min_dt = 0;
+    float        max_dt = 0;
+    float        mid_dt = 0;
 
     w = sba->w_edgenum;
     r = sba->r_edgenum;
@@ -409,7 +409,7 @@ static uint64_t sba_AnalyzeRecentEdges(
 
     while ((int64_t)(w - r) > 0)
     {
-        if (max_dt < sba->edge[r & SPDIF_ANALYZER_EDGE_MASK].dt && sba->edge[r & SPDIF_ANALYZER_EDGE_MASK].dt < min_dt * 4)
+        if (max_dt < sba->edge[r & SPDIF_ANALYZER_EDGE_MASK].dt && sba->edge[r & SPDIF_ANALYZER_EDGE_MASK].dt < min_dt * 10)
         {
             max_dt = sba->edge[r & SPDIF_ANALYZER_EDGE_MASK].dt;
         }
@@ -437,19 +437,10 @@ static uint64_t sba_AnalyzeRecentEdges(
      *                    |-|              -> solution 2, surround the center by 1 clk
      */
 
-    if ( (max_dt - min_dt) > 9 )
-    {
-      /* same as above but higher precision */
-      mid_dt = (min_dt + max_dt);
-      *pthreshold_12 = ((min_dt << 1) + mid_dt) >> 2;
-      *pthreshold_23 = ((max_dt << 1) + mid_dt) >> 2;
-    }
-    else
-    {
-      mid_dt = (min_dt + max_dt);
-      *pthreshold_12 = (mid_dt - 2) >> 1;
-      *pthreshold_23 = (mid_dt + 2) >> 1;
-    }
+    /* same as above but higher precision */
+    mid_dt = (min_dt + max_dt) / 2;
+    *pthreshold_12 = mid_dt - min_dt / 4;
+    *pthreshold_23 = mid_dt + min_dt / 2;
 
     /* is there any room for a two-tick width? */
     if ( (int64_t)(*pthreshold_23 - *pthreshold_12) <= 1 )
@@ -482,15 +473,15 @@ int SpdifBitstreamAnalyzer_AddEdge(
     /* more than 1 sample worth of data present */
     while ( (int64_t)(sba->w_edgenum - sba->r_edgenum) >= (SPDIF_ANALYZER_SAMPLE_EDGES<<1) )
     {
-        uint64_t                        threshold_12;
-        uint64_t                        threshold_23;
+        float                        threshold_12;
+        float                        threshold_23;
 
 //        printf("%ld,%ld\n", sba->w_edgenum, sba->r_edgenum );
 
         if ( sba_AnalyzeRecentEdges(sba, &threshold_12, &threshold_23 ) )
         {
             enum SpdifFrameType         synctype;
-            int64_t                     dt12,dt23;
+            float                       dt12,dt23;
 
             dt12 = threshold_12 - sba->last_threshold_12;
             if ( dt12 < 0 )     

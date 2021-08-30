@@ -139,10 +139,22 @@ void spdifAnalyzerResults::GenerateBubbleText(U64 frame_index, Channel& channel,
             AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 24, number_str, 128);
         }
 
-        if(data >= 0)
+        if (data >= 0)
+        {
+            
             snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+            AddResultString(number_str);
+            AddResultString(result_str);
+        }
         else
+        {
+            snprintf(result_str, sizeof(result_str), "-%s", number_str);
+            AddResultString(result_str);
             snprintf(result_str, sizeof(result_str), "%s + -%s%s%s", frtype, number_str, v, c);
+            AddResultString(result_str);
+        }
+
+
     }
     else
     {
@@ -152,10 +164,12 @@ void spdifAnalyzerResults::GenerateBubbleText(U64 frame_index, Channel& channel,
             AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
 
         snprintf(result_str, sizeof(result_str), "%s + %s%s%s", frtype, number_str, v, c);
+
+        AddResultString(number_str);
+        AddResultString(result_str);
     }
 
-    AddResultString(number_str);
-    AddResultString(result_str);
+
 }
 
 void spdifAnalyzerResults::GenerateExportFile(const char* file, DisplayBase display_base, U32 export_type_user_id)
@@ -167,24 +181,69 @@ void spdifAnalyzerResults::GenerateExportFile(const char* file, DisplayBase disp
         U64 trigger_sample = mAnalyzer->GetTriggerSample();
         U32 sample_rate = mAnalyzer->GetSampleRate();
 
-        file_stream << "Time [s],Value" << std::endl;
+        file_stream << "Time [s],Data,Type,Valid,Status" << std::endl;
 
         U64 num_frames = GetNumFrames();
+
         for (U32 i = 0; i < num_frames; i++)
         {
             Frame frame = GetFrame(i);
+
+            const char* frtype;
+
+            switch (frame.mType)
+            {
+            case sft_B:
+                frtype = "B";
+                break;
+            case (sft_B | 0x80):
+                frtype = "B";
+                break;
+
+            case sft_M:
+                frtype = "M";
+                break;
+
+            case sft_W:
+                frtype = "W";
+                break;
+
+            case sft_invalid:
+            default:
+                frtype = "Err";
+                break;
+            }
 
             char time_str[128];
             AnalyzerHelpers::GetTimeString(frame.mStartingSampleInclusive, trigger_sample, sample_rate, time_str, 128);
 
             char number_str[128];
-            if (mSettings->mRes == spdifRes_16b)
-                AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
+            if (display_base == Decimal)
+            {
+                int32_t data;
+                if (mSettings->mRes == spdifRes_16b)
+                {
+                    data = sext_16b(frame.mData1);
+                    AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 16, number_str, 128);
+                }
+                else
+                {
+                    data = sext_24b(frame.mData1);
+                    AnalyzerHelpers::GetNumberString(data > 0 ? data : -data, display_base, 24, number_str, 128);
+                }
+
+                file_stream << time_str << "," << (data < 0 ? "-" : "") << number_str << "," << frtype << "," << ((frame.mData2 & 1 << 28) ? "NV," : "V,") << ((frame.mData2 & 1 << 30) ? "1" : "0") << std::endl;
+
+            }
             else
-                AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
+            {
+                if (mSettings->mRes == spdifRes_16b)
+                    AnalyzerHelpers::GetNumberString(frame.mData1 & 0x0000ffff, display_base, 16, number_str, 128);
+                else
+                    AnalyzerHelpers::GetNumberString(frame.mData1 & 0x00ffffff, display_base, 24, number_str, 128);
 
-            file_stream << time_str << "," << number_str << std::endl;
-
+                file_stream << time_str << "," << number_str << "," << frtype << "," << ((frame.mData2 & 1 << 28) ? "NV," : "V,") << ((frame.mData2 & 1 << 30) ? "1" : "0") << std::endl;
+            }
             if (UpdateExportProgressAndCheckForCancel(i, num_frames) == true)
             {
                 break;
