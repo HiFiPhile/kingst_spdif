@@ -617,12 +617,13 @@ void SpdifBitstreamAnalyzer_Delete( struct SpdifBitstreamAnalyzer *sba )
     free ( sba );
 }
 
-void SpdifBitstreamAnalyzer_Reset( struct SpdifBitstreamAnalyzer *sba )
+void SpdifBitstreamAnalyzer_Reset( struct SpdifBitstreamAnalyzer *sba, uint64_t t_start )
 {
     struct SpdifBitstreamCallbacks cb;
 
     cb = sba->cb;
-    memset(sba,0,sizeof(*sba));
+    memset(sba, 0, sizeof(*sba));
+    sba->edge[SPDIF_ANALYZER_EDGE_MASK].t = t_start;
     sba->cb = cb;
 }
 

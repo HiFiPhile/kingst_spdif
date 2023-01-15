@@ -91,7 +91,7 @@ void spdifAnalyzer::WorkerThread()
     mPrevSampleEnd = mPrevStatusEnd = prev_edge;
     mSamplesSinceLastBSync = 0;
 
-    SpdifBitstreamAnalyzer_Reset(mSba);
+    SpdifBitstreamAnalyzer_Reset(mSba, prev_edge);
 
     for( ; ; )
     {

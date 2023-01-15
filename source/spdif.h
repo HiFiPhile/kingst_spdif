@@ -67,7 +67,7 @@ void wh_Init(
 struct SpdifBitstreamAnalyzer *SpdifBitstreamAnalyzer_Create( 
     struct SpdifBitstreamCallbacks *callbacks );
 
-void SpdifBitstreamAnalyzer_Reset( struct SpdifBitstreamAnalyzer *sba );
+void SpdifBitstreamAnalyzer_Reset( struct SpdifBitstreamAnalyzer *sba, uint64_t t_start );
 
 void SpdifBitstreamAnalyzer_Delete( struct SpdifBitstreamAnalyzer *sba );
 
